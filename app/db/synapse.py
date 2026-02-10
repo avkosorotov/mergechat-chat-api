@@ -467,6 +467,196 @@ async def get_edits_for_messages(
     return result
 
 
+async def get_new_events(
+    pool: asyncpg.Pool,
+    room_id: str,
+    since_stream_ordering: int,
+    limit: int = 100,
+) -> list[dict]:
+    """New m.room.message events after given stream_ordering.
+
+    Returns messages in ASC order (oldest first) with full content.
+    Excludes redacted messages and edit events (m.replace).
+    """
+    rows = await pool.fetch(
+        """
+        SELECT
+            e.event_id,
+            e.sender,
+            e.origin_server_ts AS timestamp,
+            e.stream_ordering,
+            ej.json::json->'content'->>'msgtype' AS msgtype,
+            ej.json::json->'content'->>'body' AS body,
+            ej.json::json->'content'->>'url' AS media_url,
+            ej.json::json->'content'->'info'->>'thumbnail_url' AS thumbnail_url,
+            ej.json::json->'content'->>'filename' AS file_name,
+            ej.json::json->'content'->'info'->>'size' AS file_size,
+            ej.json::json->'content'->'m.relates_to'->'m.in_reply_to'->>'event_id' AS reply_to_event_id
+        FROM events e
+        JOIN event_json ej ON ej.event_id = e.event_id
+        WHERE e.room_id = $1
+          AND e.stream_ordering > $2
+          AND e.type = 'm.room.message'
+          AND e.outlier = false
+          AND NOT EXISTS (SELECT 1 FROM redactions r WHERE r.redacts = e.event_id)
+          AND (ej.json::json->'content'->'m.relates_to'->>'rel_type' IS NULL
+               OR ej.json::json->'content'->'m.relates_to'->>'rel_type' != 'm.replace')
+        ORDER BY e.stream_ordering ASC
+        LIMIT $3
+        """,
+        room_id,
+        since_stream_ordering,
+        limit,
+    )
+
+    messages = []
+    for row in rows:
+        file_size = None
+        if row["file_size"]:
+            try:
+                file_size = int(row["file_size"])
+            except (ValueError, TypeError):
+                pass
+
+        messages.append({
+            "event_id": row["event_id"],
+            "sender": row["sender"],
+            "timestamp": row["timestamp"],
+            "stream_ordering": row["stream_ordering"],
+            "msgtype": row["msgtype"] or "m.text",
+            "body": row["body"] or "",
+            "media_url": row["media_url"],
+            "thumbnail_url": row["thumbnail_url"],
+            "file_name": row["file_name"],
+            "file_size": file_size,
+            "reply_to_event_id": row["reply_to_event_id"],
+        })
+    return messages
+
+
+async def get_new_reactions(
+    pool: asyncpg.Pool,
+    room_id: str,
+    since_stream_ordering: int,
+) -> list[dict]:
+    """New m.reaction events after given stream_ordering.
+
+    Returns: [{event_id, target_event_id, key, sender, stream_ordering}]
+    """
+    rows = await pool.fetch(
+        """
+        SELECT
+            e.event_id,
+            e.sender,
+            e.stream_ordering,
+            ej.json::json->'content'->'m.relates_to'->>'event_id' AS target_event_id,
+            ej.json::json->'content'->'m.relates_to'->>'key' AS reaction_key
+        FROM events e
+        JOIN event_json ej ON ej.event_id = e.event_id
+        WHERE e.room_id = $1
+          AND e.stream_ordering > $2
+          AND e.type = 'm.reaction'
+          AND e.outlier = false
+          AND ej.json::json->'content'->'m.relates_to'->>'rel_type' = 'm.annotation'
+          AND NOT EXISTS (SELECT 1 FROM redactions r WHERE r.redacts = e.event_id)
+        ORDER BY e.stream_ordering ASC
+        """,
+        room_id,
+        since_stream_ordering,
+    )
+
+    return [
+        {
+            "event_id": row["event_id"],
+            "target_event_id": row["target_event_id"],
+            "key": row["reaction_key"],
+            "sender": row["sender"],
+            "stream_ordering": row["stream_ordering"],
+        }
+        for row in rows
+        if row["target_event_id"] and row["reaction_key"]
+    ]
+
+
+async def get_new_edits(
+    pool: asyncpg.Pool,
+    room_id: str,
+    since_stream_ordering: int,
+) -> list[dict]:
+    """New m.room.message events with rel_type=m.replace after given stream_ordering.
+
+    Returns: [{target_event_id, edited_body, edit_ts, stream_ordering}]
+    """
+    rows = await pool.fetch(
+        """
+        SELECT
+            e.stream_ordering,
+            e.origin_server_ts AS edit_ts,
+            ej.json::json->'content'->'m.relates_to'->>'event_id' AS target_event_id,
+            ej.json::json->'content'->'m.new_content'->>'body' AS edited_body
+        FROM events e
+        JOIN event_json ej ON ej.event_id = e.event_id
+        WHERE e.room_id = $1
+          AND e.stream_ordering > $2
+          AND e.type = 'm.room.message'
+          AND e.outlier = false
+          AND ej.json::json->'content'->'m.relates_to'->>'rel_type' = 'm.replace'
+          AND NOT EXISTS (SELECT 1 FROM redactions r WHERE r.redacts = e.event_id)
+        ORDER BY e.stream_ordering ASC
+        """,
+        room_id,
+        since_stream_ordering,
+    )
+
+    return [
+        {
+            "target_event_id": row["target_event_id"],
+            "edited_body": row["edited_body"] or "",
+            "edit_ts": row["edit_ts"],
+            "stream_ordering": row["stream_ordering"],
+        }
+        for row in rows
+        if row["target_event_id"]
+    ]
+
+
+async def get_new_redactions(
+    pool: asyncpg.Pool,
+    room_id: str,
+    since_stream_ordering: int,
+) -> list[dict]:
+    """New redaction events after given stream_ordering.
+
+    Returns: [{redacted_event_id, stream_ordering}]
+    """
+    rows = await pool.fetch(
+        """
+        SELECT
+            e.stream_ordering,
+            ej.json::json->'content'->>'redacts' AS redacted_via_content,
+            (SELECT r.redacts FROM redactions r WHERE r.event_id = e.event_id LIMIT 1) AS redacted_event_id
+        FROM events e
+        JOIN event_json ej ON ej.event_id = e.event_id
+        WHERE e.room_id = $1
+          AND e.stream_ordering > $2
+          AND e.type = 'm.room.redaction'
+          AND e.outlier = false
+        ORDER BY e.stream_ordering ASC
+        """,
+        room_id,
+        since_stream_ordering,
+    )
+
+    return [
+        {
+            "redacted_event_id": row["redacted_event_id"] or row["redacted_via_content"],
+            "stream_ordering": row["stream_ordering"],
+        }
+        for row in rows
+        if row["redacted_event_id"] or row["redacted_via_content"]
+    ]
+
+
 async def get_room_invites(
     pool: asyncpg.Pool,
     matrix_user_id: str,

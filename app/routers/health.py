@@ -11,6 +11,7 @@ async def health(request: Request) -> dict:
     br = request.app.state.bridge_registry
     return {
         "status": "ok",
+        "version": request.app.version,
         "synapse_connected": pm.synapse_pool is not None,
         "bridges": br.available_slugs,
     }

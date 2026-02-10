@@ -10,7 +10,7 @@ from fastapi import FastAPI
 from app.bridges.registry import BridgeRegistry
 from app.config import AppConfig
 from app.db.pool_manager import PoolManager
-from app.routers import health, messages, rooms
+from app.routers import events, health, messages, rooms
 
 logging.basicConfig(
     level=logging.INFO,
@@ -46,12 +46,15 @@ async def lifespan(app: FastAPI):
     await pool_manager.close()
 
 
+APP_VERSION = "1.1.0"
+
 app = FastAPI(
     title="MergeChat Chat API",
-    version="1.0.0",
+    version=APP_VERSION,
     lifespan=lifespan,
 )
 
 app.include_router(health.router)
 app.include_router(rooms.router)
 app.include_router(messages.router)
+app.include_router(events.router)
