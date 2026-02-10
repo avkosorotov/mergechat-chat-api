@@ -136,17 +136,23 @@ async def stream_room_events(
                     )
                     last_stream = max(last_stream, edit["stream_ordering"])
 
-            # 4. Redactions
+            # 4. Redactions (messages and reactions)
             new_redactions = await synapse_db.get_new_redactions(
                 synapse_pool, room_id, last_stream
             )
             if new_redactions:
                 events_found = True
                 for redaction in new_redactions:
-                    yield (
-                        f"event: redact\n"
-                        f"data: {json.dumps(redaction)}\n\n"
-                    )
+                    if redaction.get("type") == "reaction":
+                        yield (
+                            f"event: reaction_redact\n"
+                            f"data: {json.dumps(redaction)}\n\n"
+                        )
+                    else:
+                        yield (
+                            f"event: redact\n"
+                            f"data: {json.dumps(redaction)}\n\n"
+                        )
                     last_stream = max(last_stream, redaction["stream_ordering"])
 
             # Heartbeat

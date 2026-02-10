@@ -627,34 +627,69 @@ async def get_new_redactions(
 ) -> list[dict]:
     """New redaction events after given stream_ordering.
 
-    Returns: [{redacted_event_id, stream_ordering}]
+    Detects whether the redacted event was a message or a reaction.
+    For reactions: also returns target_event_id, key, and sender so the
+    frontend can remove the specific reaction from the message.
+
+    Returns: [{redacted_event_id, stream_ordering, type,
+               target_event_id?, key?, sender?}]
     """
     rows = await pool.fetch(
         """
+        WITH new_redactions AS (
+            SELECT
+                e.stream_ordering,
+                e.event_id AS redaction_event_id,
+                COALESCE(
+                    (SELECT r.redacts FROM redactions r
+                     WHERE r.event_id = e.event_id LIMIT 1),
+                    ej.json::json->'content'->>'redacts'
+                ) AS redacted_event_id
+            FROM events e
+            JOIN event_json ej ON ej.event_id = e.event_id
+            WHERE e.room_id = $1
+              AND e.stream_ordering > $2
+              AND e.type = 'm.room.redaction'
+              AND e.outlier = false
+        )
         SELECT
-            e.stream_ordering,
-            ej.json::json->'content'->>'redacts' AS redacted_via_content,
-            (SELECT r.redacts FROM redactions r WHERE r.event_id = e.event_id LIMIT 1) AS redacted_event_id
-        FROM events e
-        JOIN event_json ej ON ej.event_id = e.event_id
-        WHERE e.room_id = $1
-          AND e.stream_ordering > $2
-          AND e.type = 'm.room.redaction'
-          AND e.outlier = false
-        ORDER BY e.stream_ordering ASC
+            nr.stream_ordering,
+            nr.redacted_event_id,
+            re.type AS redacted_event_type,
+            re.sender AS redacted_sender,
+            CASE WHEN re.type = 'm.reaction' THEN
+                rej.json::json->'content'->'m.relates_to'->>'event_id'
+            END AS reaction_target_event_id,
+            CASE WHEN re.type = 'm.reaction' THEN
+                rej.json::json->'content'->'m.relates_to'->>'key'
+            END AS reaction_key
+        FROM new_redactions nr
+        LEFT JOIN events re ON re.event_id = nr.redacted_event_id
+        LEFT JOIN event_json rej
+            ON rej.event_id = nr.redacted_event_id
+            AND re.type = 'm.reaction'
+        WHERE nr.redacted_event_id IS NOT NULL
+        ORDER BY nr.stream_ordering ASC
         """,
         room_id,
         since_stream_ordering,
     )
 
-    return [
-        {
-            "redacted_event_id": row["redacted_event_id"] or row["redacted_via_content"],
+    results = []
+    for row in rows:
+        item: dict = {
+            "redacted_event_id": row["redacted_event_id"],
             "stream_ordering": row["stream_ordering"],
         }
-        for row in rows
-        if row["redacted_event_id"] or row["redacted_via_content"]
-    ]
+        if row["redacted_event_type"] == "m.reaction":
+            item["type"] = "reaction"
+            item["target_event_id"] = row["reaction_target_event_id"]
+            item["key"] = row["reaction_key"]
+            item["sender"] = row["redacted_sender"]
+        else:
+            item["type"] = "message"
+        results.append(item)
+    return results
 
 
 async def get_room_invites(
