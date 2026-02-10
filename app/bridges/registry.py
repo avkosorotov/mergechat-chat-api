@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 
 from app.bridges.base import BridgeAdapter
+from app.bridges.max import MaxAdapter
 from app.bridges.telegram import TelegramAdapter
 from app.bridges.whatsapp import WhatsAppAdapter
 from app.db.pool_manager import PoolManager
@@ -15,6 +16,7 @@ logger = logging.getLogger("chat-api.bridges")
 ADAPTER_CLASSES: dict[str, type[BridgeAdapter]] = {
     "telegram": TelegramAdapter,
     "whatsapp": WhatsAppAdapter,
+    "max": MaxAdapter,
 }
 
 
