@@ -1,0 +1,9 @@
+shared_secret: "CHANGE_ME"
+homeserver_url: "http://synapse:8008"
+homeserver_domain: "route24.store"
+synapse_dsn: "postgresql://synapse:CHANGE_ME@postgres:5432/synapse"
+
+bridges:
+  - slug: telegram
+    framework: python
+    dsn: "postgresql://synapse:CHANGE_ME@postgres:5432/mautrix_telegram"
