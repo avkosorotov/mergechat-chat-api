@@ -98,7 +98,7 @@ async def get_rooms(
         # from bridges that use user IDs as room names), try contact display name
         if (not name or name.isdigit()) and members_count <= 3:
             members = await synapse_db.get_room_members_display(
-                synapse_pool, rid, ["@conn-%"]
+                synapse_pool, rid
             )
             contacts = [m for m in members if m["user_id"] != matrix_user_id]
             for c in contacts:
@@ -233,7 +233,7 @@ async def get_rooms_filtered(
 
         if (not name or name.isdigit()) and members_count <= 3:
             members = await synapse_db.get_room_members_display(
-                synapse_pool, rid, ["@conn-%"]
+                synapse_pool, rid
             )
             contacts = [m for m in members if m["user_id"] != matrix_user_id]
             for c in contacts:
@@ -337,7 +337,7 @@ async def get_orphaned_rooms(
         # Name fallback for small rooms
         if not name and members_count <= 3:
             members = await synapse_db.get_room_members_display(
-                synapse_pool, rid, ["@conn-%"]
+                synapse_pool, rid
             )
             contacts = [m for m in members if m["user_id"] != matrix_user_id]
             if contacts:
