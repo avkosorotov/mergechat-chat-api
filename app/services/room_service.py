@@ -90,15 +90,21 @@ async def get_rooms(
         name = meta.get("name") or ""
         members_count = meta.get("members_count", 0)
 
-        # Fallback: for small rooms without a name, try to get contact display name
-        # This covers: bridged DMs/bots + orphaned portal rooms not in bridge DB
-        if not name and members_count <= 3:
+        # Use bridge portal display_name if Synapse name is empty or numeric
+        if (not name or name.isdigit()) and portal and portal.display_name:
+            name = portal.display_name
+
+        # Fallback: for small rooms without a name (or with a numeric-only name
+        # from bridges that use user IDs as room names), try contact display name
+        if (not name or name.isdigit()) and members_count <= 3:
             members = await synapse_db.get_room_members_display(
                 synapse_pool, rid, ["@conn-%"]
             )
             contacts = [m for m in members if m["user_id"] != matrix_user_id]
-            if contacts:
-                name = contacts[0]["display_name"]
+            for c in contacts:
+                if c["display_name"] and not c["display_name"].isdigit():
+                    name = c["display_name"]
+                    break
 
         if not name:
             name = rid
@@ -220,13 +226,20 @@ async def get_rooms_filtered(
 
         name = meta.get("name") or ""
         members_count = meta.get("members_count", 0)
-        if not name and members_count <= 3:
+
+        # Use bridge portal display_name if Synapse name is empty or numeric
+        if (not name or name.isdigit()) and portal and portal.display_name:
+            name = portal.display_name
+
+        if (not name or name.isdigit()) and members_count <= 3:
             members = await synapse_db.get_room_members_display(
                 synapse_pool, rid, ["@conn-%"]
             )
             contacts = [m for m in members if m["user_id"] != matrix_user_id]
-            if contacts:
-                name = contacts[0]["display_name"]
+            for c in contacts:
+                if c["display_name"] and not c["display_name"].isdigit():
+                    name = c["display_name"]
+                    break
         if not name:
             name = rid
 

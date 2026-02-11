@@ -18,7 +18,8 @@ class MaxAdapter(BridgeAdapter):
             """
             SELECT
                 p.mxid AS room_id,
-                p.max_chat_id::text AS remote_id
+                p.max_chat_id::text AS remote_id,
+                p.name AS portal_name
             FROM portal p
             WHERE p.mxid = ANY($1)
             """,
@@ -30,6 +31,7 @@ class MaxAdapter(BridgeAdapter):
                 remote_id=r["remote_id"],
                 room_type="dm",
                 bridge_slug=self.slug,
+                display_name=r["portal_name"] if r["portal_name"] and not r["portal_name"].isdigit() else None,
             )
             for r in rows
         ]

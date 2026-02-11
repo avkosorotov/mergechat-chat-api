@@ -13,7 +13,7 @@ RoomType = Literal["dm", "group", "channel", "bot"]
 class BridgePortalInfo:
     """Metadata about a portal (chat) from the bridge DB."""
 
-    __slots__ = ("room_id", "remote_id", "room_type", "bridge_slug")
+    __slots__ = ("room_id", "remote_id", "room_type", "bridge_slug", "display_name")
 
     def __init__(
         self,
@@ -21,11 +21,13 @@ class BridgePortalInfo:
         remote_id: str,
         room_type: RoomType,
         bridge_slug: str,
+        display_name: str | None = None,
     ) -> None:
         self.room_id = room_id
         self.remote_id = remote_id
         self.room_type = room_type
         self.bridge_slug = bridge_slug
+        self.display_name = display_name
 
 
 class BridgeAdapter(ABC):
