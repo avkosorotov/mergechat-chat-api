@@ -27,6 +27,27 @@ _FILTER_MAP = {
     "bot": "show_bots",
 }
 
+# System/promo messages that indicate an empty chat (no real conversation)
+_SYSTEM_MESSAGE_PATTERNS = [
+    "теперь в max",
+    "теперь в макс",
+    "now in max",
+    "напишите что-нибудь",
+]
+
+
+def _is_system_only(room: ChatApiRoom) -> bool:
+    """Check if a room has no real messages (empty or system-message only)."""
+    if not room.last_message:
+        return True
+    body = (room.last_message.body or "").strip().lower()
+    if not body:
+        return True
+    for pattern in _SYSTEM_MESSAGE_PATTERNS:
+        if pattern in body:
+            return True
+    return False
+
 
 async def get_rooms(
     pool_manager: PoolManager,
@@ -139,12 +160,15 @@ async def get_rooms(
         )
         rooms.append(room)
 
-    # 7. Search filter
+    # 7. Hide empty / system-only chats
+    rooms = [r for r in rooms if not _is_system_only(r)]
+
+    # 8. Search filter
     if search:
         q = search.lower()
         rooms = [r for r in rooms if q in r.name.lower()]
 
-    # 8. Sort by last message timestamp (most recent first), then by name
+    # 9. Sort by last message timestamp (most recent first), then by name
     rooms.sort(
         key=lambda r: (
             -(r.last_message.timestamp if r.last_message else 0),
@@ -152,7 +176,7 @@ async def get_rooms(
         )
     )
 
-    # 9. Paginate
+    # 10. Paginate
     total = len(rooms)
     start = (page - 1) * page_size
     end = start + page_size
@@ -269,12 +293,15 @@ async def get_rooms_filtered(
         )
         rooms.append(room)
 
-    # 7. Search
+    # 7. Hide empty / system-only chats
+    rooms = [r for r in rooms if not _is_system_only(r)]
+
+    # 8. Search
     if search:
         q = search.lower()
         rooms = [r for r in rooms if q in r.name.lower()]
 
-    # 8. Sort
+    # 9. Sort
     rooms.sort(
         key=lambda r: (
             -(r.last_message.timestamp if r.last_message else 0),
@@ -282,7 +309,7 @@ async def get_rooms_filtered(
         )
     )
 
-    # 9. Paginate
+    # 10. Paginate
     total = len(rooms)
     start = (page - 1) * page_size
     end = start + page_size
