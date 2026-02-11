@@ -37,12 +37,10 @@ _SYSTEM_MESSAGE_PATTERNS = [
 
 
 def _is_system_only(room: ChatApiRoom) -> bool:
-    """Check if a room has no real messages (empty or system-message only)."""
-    if not room.last_message:
-        return True
-    body = (room.last_message.body or "").strip().lower()
-    if not body:
-        return True
+    """Check if the last message is a system/promo message (not a real conversation)."""
+    if not room.last_message or not room.last_message.body:
+        return False  # No message yet — show the room
+    body = room.last_message.body.strip().lower()
     for pattern in _SYSTEM_MESSAGE_PATTERNS:
         if pattern in body:
             return True
