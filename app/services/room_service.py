@@ -106,7 +106,10 @@ async def get_rooms(
                     name = c["display_name"]
                     break
 
-        if not name:
+        # Human-readable fallback for numeric names from bridges
+        if name and name.isdigit() and portal:
+            name = f"Контакт #{name}"
+        elif not name:
             name = rid
 
         # Avatar: room avatar first, then contact avatar for DMs/bots
@@ -240,7 +243,9 @@ async def get_rooms_filtered(
                 if c["display_name"] and not c["display_name"].isdigit():
                     name = c["display_name"]
                     break
-        if not name:
+        if name and name.isdigit() and portal:
+            name = f"Контакт #{name}"
+        elif not name:
             name = rid
 
         avatar_mxc = meta.get("avatar_mxc") or dm_avatars.get(rid)
