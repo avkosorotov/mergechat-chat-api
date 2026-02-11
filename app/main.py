@@ -10,7 +10,7 @@ from fastapi import FastAPI
 from app.bridges.registry import BridgeRegistry
 from app.config import AppConfig
 from app.db.pool_manager import PoolManager
-from app.routers import events, health, messages, rooms
+from app.routers import events, health, messages, rooms, stats
 
 logging.basicConfig(
     level=logging.INFO,
@@ -58,3 +58,4 @@ app.include_router(health.router)
 app.include_router(rooms.router)
 app.include_router(messages.router)
 app.include_router(events.router)
+app.include_router(stats.router)

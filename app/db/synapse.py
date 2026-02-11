@@ -692,6 +692,35 @@ async def get_new_redactions(
     return results
 
 
+async def count_messages_by_room_sender(
+    pool: asyncpg.Pool,
+    start_ts: int,
+    end_ts: int,
+) -> list[dict]:
+    """Count m.room.message events grouped by room_id and sender.
+
+    Uses origin_server_ts range (milliseconds since epoch).
+    Excludes redacted messages and outliers.
+
+    Returns [{room_id, sender, cnt}].
+    """
+    rows = await pool.fetch(
+        """
+        SELECT e.room_id, e.sender, COUNT(*) AS cnt
+        FROM events e
+        WHERE e.type = 'm.room.message'
+          AND e.outlier = false
+          AND e.origin_server_ts >= $1
+          AND e.origin_server_ts < $2
+          AND NOT EXISTS (SELECT 1 FROM redactions r WHERE r.redacts = e.event_id)
+        GROUP BY e.room_id, e.sender
+        """,
+        start_ts,
+        end_ts,
+    )
+    return [{"room_id": r["room_id"], "sender": r["sender"], "cnt": r["cnt"]} for r in rows]
+
+
 async def get_room_invites(
     pool: asyncpg.Pool,
     matrix_user_id: str,
