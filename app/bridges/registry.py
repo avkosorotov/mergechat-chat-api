@@ -5,6 +5,11 @@ from __future__ import annotations
 import logging
 
 from app.bridges.base import BridgeAdapter
+from app.bridges.discord import DiscordAdapter
+from app.bridges.gmessages import (
+    GMessagesAdapter, FacebookAdapter, InstagramAdapter, TwitterAdapter, GVoiceAdapter,
+)
+from app.bridges.googlechat import GoogleChatAdapter
 from app.bridges.max import MaxAdapter
 from app.bridges.telegram import TelegramAdapter
 from app.bridges.whatsapp import WhatsAppAdapter
@@ -17,6 +22,13 @@ ADAPTER_CLASSES: dict[str, type[BridgeAdapter]] = {
     "telegram": TelegramAdapter,
     "whatsapp": WhatsAppAdapter,
     "max": MaxAdapter,
+    "gmessages": GMessagesAdapter,
+    "gvoice": GVoiceAdapter,
+    "facebook": FacebookAdapter,
+    "instagram": InstagramAdapter,
+    "twitter": TwitterAdapter,
+    "discord": DiscordAdapter,
+    "googlechat": GoogleChatAdapter,
 }
 
 
